@@ -15,12 +15,16 @@ on:
       - 'gpuix-runtime.json'
       - 'scripts/build-web.ts'
       - '.github/workflows/docker.yml'
+      - 'install.sh'
+      - 'tests/pty/**'
   pull_request:
     paths:
       - 'Dockerfile'
       - 'docker/**'
       - '.dockerignore'
       - '.github/workflows/docker.yml'
+      - 'install.sh'
+      - 'tests/pty/**'
   workflow_dispatch:
 
 permissions:
@@ -308,6 +312,33 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker rm -f hw-ci >/dev/null 2>&1 || true
+
+  pty-suite:
+    name: installer PTY suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Find node
+        run: which node && node --version
+      - name: Run installer PTY suite
+        run: |
+          set +e
+          FAILED=0
+          for case in menu-default hidden-input already-configured auth-write custom-endpoint custom-endpoint-prompt custom-endpoint-basic custom-endpoint-basic-prompt endpoint-check endpoint-check-fail endpoint-roundtrip endpoint-roundtrip-fail endpoint-tool-roundtrip-fail endpoint-tool-call-no-file endpoint-agent-turn-fail menu-pi bun-prompt-decline bun-install-accept desktop-launcher eof-default; do
+            echo "=== $case ==="
+            PTY_REAL_NODE=/usr/bin/node bash tests/pty/run-case.sh "$case" 2>&1 | tail -40
+            RC=$?
+            if [ "$RC" -ne 0 ]; then
+              echo "FAILED: $case (exit $RC)"
+              FAILED=1
+            fi
+          done
+          exit $FAILED
 
   native-build:
     name: native executable image
